@@ -1,75 +1,153 @@
-from fastapi import FastAPI, APIRouter
-from dotenv import load_dotenv
-from starlette.middleware.cors import CORSMiddleware
-from motor.motor_asyncio import AsyncIOMotorClient
 import os
-import logging
-from pathlib import Path
-from pydantic import BaseModel, Field
-from typing import List
 import uuid
-from datetime import datetime
+import base64
+from datetime import datetime, timezone
+from io import BytesIO
+from typing import List
 
+from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
+from motor.motor_asyncio import AsyncIOMotorClient
+from barcode import Code128
+from barcode.writer import ImageWriter
 
-ROOT_DIR = Path(__file__).parent
-load_dotenv(ROOT_DIR / '.env')
+# Environment variables
+MONGO_URL = os.environ.get('MONGO_URL', 'mongodb://localhost:27017')
+DB_NAME = os.environ.get('DB_NAME', 'barcode_generator')
+CORS_ORIGINS = os.environ.get('CORS_ORIGINS', '*').split(',')
 
-# MongoDB connection
-mongo_url = os.environ['MONGO_URL']
-client = AsyncIOMotorClient(mongo_url)
-db = client[os.environ['DB_NAME']]
+# FastAPI app
+app = FastAPI(title="Barcode Generator API")
 
-# Create the main app without a prefix
-app = FastAPI()
-
-# Create a router with the /api prefix
-api_router = APIRouter(prefix="/api")
-
-
-# Define Models
-class StatusCheck(BaseModel):
-    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
-    client_name: str
-    timestamp: datetime = Field(default_factory=datetime.utcnow)
-
-class StatusCheckCreate(BaseModel):
-    client_name: str
-
-# Add your routes to the router instead of directly to app
-@api_router.get("/")
-async def root():
-    return {"message": "Hello World"}
-
-@api_router.post("/status", response_model=StatusCheck)
-async def create_status_check(input: StatusCheckCreate):
-    status_dict = input.dict()
-    status_obj = StatusCheck(**status_dict)
-    _ = await db.status_checks.insert_one(status_obj.dict())
-    return status_obj
-
-@api_router.get("/status", response_model=List[StatusCheck])
-async def get_status_checks():
-    status_checks = await db.status_checks.find().to_list(1000)
-    return [StatusCheck(**status_check) for status_check in status_checks]
-
-# Include the router in the main app
-app.include_router(api_router)
-
+# CORS middleware
 app.add_middleware(
     CORSMiddleware,
+    allow_origins=CORS_ORIGINS,
     allow_credentials=True,
-    allow_origins=os.environ.get('CORS_ORIGINS', '*').split(','),
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
-logger = logging.getLogger(__name__)
+# MongoDB connection
+client = AsyncIOMotorClient(MONGO_URL)
+db = client[DB_NAME]
 
-@app.on_event("shutdown")
-async def shutdown_db_client():
-    client.close()
+# Pydantic models
+class BarcodeRequest(BaseModel):
+    text: str
+
+class BarcodeResponse(BaseModel):
+    id: str
+    text: str
+    barcode_image: str  # base64 encoded image
+    created_at: str
+
+class BarcodeListResponse(BaseModel):
+    barcodes: List[BarcodeResponse]
+
+# Helper functions
+def generate_barcode_image(text: str) -> str:
+    """Generate Code128 barcode and return as base64 string"""
+    try:
+        # Create Code128 barcode
+        code = Code128(text, writer=ImageWriter())
+        
+        # Generate image in memory
+        buffer = BytesIO()
+        code.write(buffer)
+        buffer.seek(0)
+        
+        # Convert to base64
+        image_base64 = base64.b64encode(buffer.getvalue()).decode('utf-8')
+        return f"data:image/png;base64,{image_base64}"
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Error generating barcode: {str(e)}")
+
+def prepare_for_mongo(data):
+    """Prepare data for MongoDB storage"""
+    if isinstance(data.get('created_at'), str):
+        return data
+    data['created_at'] = data['created_at'].isoformat() if 'created_at' in data else datetime.now(timezone.utc).isoformat()
+    return data
+
+def parse_from_mongo(item):
+    """Parse data from MongoDB"""
+    if isinstance(item.get('created_at'), str):
+        return item
+    return item
+
+# API Endpoints
+@app.get("/")
+async def root():
+    return {"message": "Barcode Generator API", "status": "running"}
+
+@app.post("/api/generate-barcode", response_model=BarcodeResponse)
+async def generate_barcode(request: BarcodeRequest):
+    """Generate a new barcode and save to database"""
+    try:
+        # Validate input
+        if not request.text.strip():
+            raise HTTPException(status_code=400, detail="Text cannot be empty")
+        
+        # Generate unique ID
+        barcode_id = str(uuid.uuid4())
+        
+        # Generate barcode image
+        barcode_image = generate_barcode_image(request.text.strip())
+        
+        # Create barcode document
+        barcode_doc = {
+            "id": barcode_id,
+            "text": request.text.strip(),
+            "barcode_image": barcode_image,
+            "created_at": datetime.now(timezone.utc).isoformat()
+        }
+        
+        # Save to database
+        await db.barcodes.insert_one(prepare_for_mongo(barcode_doc.copy()))
+        
+        return BarcodeResponse(**barcode_doc)
+    
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error generating barcode: {str(e)}")
+
+@app.get("/api/barcodes", response_model=BarcodeListResponse)
+async def get_all_barcodes():
+    """Get all generated barcodes from database"""
+    try:
+        barcodes = await db.barcodes.find().sort("created_at", -1).to_list(length=None)
+        barcode_list = [parse_from_mongo(barcode) for barcode in barcodes]
+        return BarcodeListResponse(barcodes=barcode_list)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error fetching barcodes: {str(e)}")
+
+@app.get("/api/barcode/{barcode_id}", response_model=BarcodeResponse)
+async def get_barcode(barcode_id: str):
+    """Get specific barcode by ID"""
+    try:
+        barcode = await db.barcodes.find_one({"id": barcode_id})
+        if not barcode:
+            raise HTTPException(status_code=404, detail="Barcode not found")
+        return BarcodeResponse(**parse_from_mongo(barcode))
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error fetching barcode: {str(e)}")
+
+@app.delete("/api/barcode/{barcode_id}")
+async def delete_barcode(barcode_id: str):
+    """Delete specific barcode by ID"""
+    try:
+        result = await db.barcodes.delete_one({"id": barcode_id})
+        if result.deleted_count == 0:
+            raise HTTPException(status_code=404, detail="Barcode not found")
+        return {"message": "Barcode deleted successfully"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error deleting barcode: {str(e)}")
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8001)
