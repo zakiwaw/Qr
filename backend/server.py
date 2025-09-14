@@ -7,6 +7,8 @@ from typing import List
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from motor.motor_asyncio import AsyncIOMotorClient
 from barcode import Code128
@@ -28,6 +30,10 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Serve static files (built React app)
+if os.path.exists("static"):
+    app.mount("/static", StaticFiles(directory="static"), name="static")
 
 # MongoDB connection
 client = AsyncIOMotorClient(MONGO_URL)
@@ -77,10 +83,32 @@ def parse_from_mongo(item):
         return item
     return item
 
+# Serve React app for all non-API routes
+@app.get("/", include_in_schema=False)
+async def serve_frontend():
+    """Serve the React frontend"""
+    if os.path.exists("static/index.html"):
+        return FileResponse("static/index.html")
+    else:
+        return {"message": "Frontend not built. Please build the React app first."}
+
+# Catch all route for React Router (SPA)
+@app.get("/{path:path}", include_in_schema=False)
+async def serve_frontend_routes(path: str):
+    """Serve React app for all frontend routes"""
+    # Skip API routes
+    if path.startswith("api/") or path.startswith("docs") or path.startswith("redoc"):
+        raise HTTPException(status_code=404, detail="Not found")
+    
+    if os.path.exists("static/index.html"):
+        return FileResponse("static/index.html")
+    else:
+        return {"message": "Frontend not built"}
+
 # API Endpoints
-@app.get("/")
-async def root():
-    return {"message": "Barcode Generator API", "status": "running"}
+@app.get("/api/health")
+async def health_check():
+    return {"message": "Barcode Generator API", "status": "running", "frontend": os.path.exists("static/index.html")}
 
 @app.post("/api/generate-barcode", response_model=BarcodeResponse)
 async def generate_barcode(request: BarcodeRequest):

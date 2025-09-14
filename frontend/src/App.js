@@ -2,7 +2,8 @@ import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import './App.css';
 
-const API_BASE_URL = process.env.REACT_APP_BACKEND_URL;
+// Use relative API URL since frontend and backend are served from same domain
+const API_BASE_URL = '';
 
 function App() {
   const [inputText, setInputText] = useState('');
@@ -90,6 +91,11 @@ function App() {
             <span className="text-indigo-600">Code128</span> Barcode Generator
           </h1>
           <p className="text-gray-600">Erstellen Sie Code128 Barcodes aus Text und Zahlen</p>
+          <div className="mt-2">
+            <span className="inline-block bg-green-100 text-green-800 text-xs px-2 py-1 rounded-full">
+              🚀 Kostenlos auf Render gehostet
+            </span>
+          </div>
         </div>
 
         {/* Generator Form */}
@@ -217,6 +223,11 @@ function App() {
               ))}
             </div>
           )}
+        </div>
+
+        {/* Footer */}
+        <div className="text-center mt-12 text-gray-500 text-sm">
+          <p>Code128 Barcode Generator - Kostenlos auf Render gehostet 🚀</p>
         </div>
       </div>
     </div>

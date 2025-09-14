@@ -1,0 +1,15 @@
+services:
+  - type: web
+    name: barcode-generator-fullstack
+    env: docker
+    dockerfilePath: ./Dockerfile
+    plan: free
+    region: frankfurt
+    envVars:
+      - key: MONGO_URL
+        sync: false
+      - key: DB_NAME
+        value: barcode_generator
+      - key: CORS_ORIGINS
+        value: "*"
+    healthCheckPath: /api/health
