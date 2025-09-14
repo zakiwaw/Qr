@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import './App.css';
 
-const API_BASE_URL = process.env.REACT_APP_BACKEND_URL;
+const API_BASE_URL = 'https://qr-3ju2.onrender.com';
 
 function App() {
   const [inputText, setInputText] = useState('');
