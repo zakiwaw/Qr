@@ -109,6 +109,8 @@ async def generate_barcode(request: BarcodeRequest):
         
         return BarcodeResponse(**barcode_doc)
     
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error generating barcode: {str(e)}")
 
