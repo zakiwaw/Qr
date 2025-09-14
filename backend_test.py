@@ -402,7 +402,7 @@ class BarcodeAPITester:
         
         # Test order matters - generate barcodes first, then test retrieval/deletion
         tests = [
-            ("Root Endpoint", self.test_root_endpoint),
+            ("API Availability", self.test_root_endpoint),
             ("Generate Barcode (Text)", self.test_generate_barcode_text),
             ("Generate Barcode (Numbers)", self.test_generate_barcode_numbers),
             ("Generate Barcode (Mixed)", self.test_generate_barcode_mixed),
