@@ -48,22 +48,23 @@ class BarcodeAPITester:
             return False
     
     def test_root_endpoint(self):
-        """Test root endpoint availability"""
+        """Test API availability by testing a simple endpoint"""
         try:
-            response = self.session.get(f"{self.base_url.replace('/api', '')}/")
+            # Test the /api/barcodes endpoint as a health check since root returns frontend
+            response = self.session.get(f"{self.base_url}/barcodes")
             if response.status_code == 200:
                 data = response.json()
-                if "message" in data and "status" in data:
-                    self.log_test("Root Endpoint", "PASS", f"API is running: {data['message']}")
+                if "barcodes" in data:
+                    self.log_test("API Availability", "PASS", "Backend API is accessible and responding")
                     return True
                 else:
-                    self.log_test("Root Endpoint", "FAIL", "Invalid response format")
+                    self.log_test("API Availability", "FAIL", "Invalid response format")
                     return False
             else:
-                self.log_test("Root Endpoint", "FAIL", f"Status code: {response.status_code}")
+                self.log_test("API Availability", "FAIL", f"Status code: {response.status_code}")
                 return False
         except Exception as e:
-            self.log_test("Root Endpoint", "FAIL", f"Connection error: {str(e)}")
+            self.log_test("API Availability", "FAIL", f"Connection error: {str(e)}")
             return False
     
     def test_generate_barcode_text(self):
