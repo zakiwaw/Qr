@@ -149,6 +149,9 @@ backend:
       - working: true
         agent: "testing"
         comment: "✅ TESTED: All CRUD endpoints working perfectly. POST /api/generate-barcode creates barcodes with proper validation. GET /api/barcodes retrieves all barcodes. GET /api/barcode/{id} retrieves specific barcodes. DELETE /api/barcode/{id} removes barcodes. All endpoints handle errors correctly (404 for not found, 400 for invalid input)."
+      - working: true
+        agent: "main"
+        comment: "Added maximum length validation (255 chars) for barcode generation input and unit tests"
 
 frontend:
   - task: "Barcode Generator UI"
@@ -178,7 +181,7 @@ frontend:
 metadata:
   created_by: "main_agent"
   version: "1.0"
-  test_sequence: 1
+  test_sequence: 2
   run_ui: false
 
 test_plan:
@@ -192,3 +195,5 @@ agent_communication:
     message: "Implemented complete barcode generator app. Frontend tested manually and working. Backend needs thorough API testing for barcode generation, database storage, and CRUD operations."
   - agent: "testing"
     message: "✅ BACKEND TESTING COMPLETE: All backend APIs tested and working perfectly! Fixed one error handling bug where HTTPExceptions were being caught and re-raised as 500 errors. All 11 comprehensive tests passed (100% success rate). Tested: barcode generation (text/numbers/mixed), database storage, CRUD operations, error handling, and data persistence. Backend is production-ready."
+  - agent: "main"
+    message: "Added length validation to generate-barcode API and added unit tests verifying 400 response for inputs over 255 characters."
