@@ -89,6 +89,8 @@ async def generate_barcode(request: BarcodeRequest):
         # Validate input
         if not request.text.strip():
             raise HTTPException(status_code=400, detail="Text cannot be empty")
+        if len(request.text) > 255:
+            raise HTTPException(status_code=400, detail="Text cannot exceed 255 characters")
         
         # Generate unique ID
         barcode_id = str(uuid.uuid4())
